@@ -7,6 +7,10 @@ import { ChessEngine, Move } from '@/lib/chess-engine';
 import { ChessBoard } from '@/components/ChessBoard';
 import { ChessAI } from '@/lib/chess-ai';
 import { roomManager, GameRoom } from '@/lib/room-manager';
+import { MoveHistory } from '@/components/MoveHistory';
+import { ChessClock } from '@/components/ChessClock';
+import { PlayerInfo } from '@/components/PlayerInfo';
+import { GameMenu } from '@/components/GameMenu';
 import { THEME, AI_DIFFICULTY_LEVELS } from '@/lib/constants';
 
 type GameMode = 'menu' | 'ai' | 'multiplayer' | 'online';
@@ -24,6 +28,10 @@ export default function Home() {
   const [showJoinDialog, setShowJoinDialog] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [isAiThinking, setIsAiThinking] = useState(false);
+  const [whiteTime, setWhiteTime] = useState(600);
+  const [blackTime, setBlackTime] = useState(600);
+  const [capturedWhite, setCapturedWhite] = useState<any[]>([]);
+  const [capturedBlack, setCapturedBlack] = useState<any[]>([]);
 
   useEffect(() => {
     if (gameMode === 'ai' && ai) {
@@ -33,9 +41,7 @@ export default function Home() {
           const bestMove = ai.findBestMove();
           if (bestMove) {
             const newEngine = new ChessEngine();
-            // Copy game state
             const state = engine.getState();
-            // Make moves
             for (const move of state.moveHistory) {
               newEngine.makeMove(move);
             }
@@ -59,6 +65,12 @@ export default function Home() {
 
     if (newEngine.makeMove(move)) {
       setEngine(newEngine);
+      
+      if (engine.getTurn() === 'white') {
+        setBlackTime((prev) => Math.max(0, prev - 1));
+      } else {
+        setWhiteTime((prev) => Math.max(0, prev - 1));
+      }
     }
   };
 
@@ -70,6 +82,10 @@ export default function Home() {
     const newAi = new ChessAI(AI_DIFFICULTY_LEVELS[selectedDifficulty].depth);
     setAi(newAi);
     setGameMode('ai');
+    setWhiteTime(600);
+    setBlackTime(600);
+    setCapturedWhite([]);
+    setCapturedBlack([]);
   };
 
   const createRoom = () => {
@@ -229,8 +245,24 @@ export default function Home() {
         )}
 
         {(gameMode === 'ai' || gameMode === 'multiplayer') && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Board */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Left Panel */}
+            <div className="space-y-4">
+              <PlayerInfo
+                playerName={gameMode === 'ai' ? 'الذكاء الاصطناعي' : 'خصمك'}
+                color="black"
+                capturedPieces={capturedBlack}
+                isActive={engine.getTurn() === 'black'}
+              />
+              <ChessClock
+                whiteTime={whiteTime}
+                blackTime={blackTime}
+                currentTurn={engine.getTurn()}
+                isActive={!engine.isGameOver()}
+              />
+            </div>
+
+            {/* Center - Board */}
             <div className="lg:col-span-2">
               <Card
                 className="p-6"
@@ -248,61 +280,52 @@ export default function Home() {
               </Card>
             </div>
 
-            {/* Info Panel */}
+            {/* Right Panel */}
             <div className="space-y-4">
+              <PlayerInfo
+                playerName="أنت"
+                color="white"
+                capturedPieces={capturedWhite}
+                isActive={engine.getTurn() === 'white'}
+              />
+
               <Card
-                className="p-6"
+                className="p-4"
                 style={{
                   backgroundColor: THEME.primary,
                   borderColor: THEME.secondary,
                 }}
               >
-                <h3
-                  className="text-xl font-bold mb-4"
-                  style={{ color: THEME.secondary }}
-                >
-                  معلومات اللعبة
-                </h3>
-                <div className="space-y-3">
-                  <div>
-                    <p style={{ color: THEME.textSecondary }}>الحالة:</p>
-                    <p className="font-bold">{getGameStatus()}</p>
-                  </div>
-                  {gameMode === 'ai' && (
-                    <div>
-                      <p style={{ color: THEME.textSecondary }}>مستوى الصعوبة:</p>
-                      <p className="font-bold">{AI_DIFFICULTY_LEVELS[difficulty].label}</p>
-                    </div>
-                  )}
-                  <div>
-                    <p style={{ color: THEME.textSecondary }}>لونك:</p>
-                    <p className="font-bold">
-                      {playerColor === 'white' ? 'أبيض' : 'أسود'}
-                    </p>
-                  </div>
-                  <div>
-                    <p style={{ color: THEME.textSecondary }}>عدد الحركات:</p>
-                    <p className="font-bold">{engine.getMoveHistory().length}</p>
-                  </div>
-                </div>
+                <GameMenu
+                  onNewGame={resetGame}
+                  onResign={() => resetGame()}
+                  onDraw={() => resetGame()}
+                  difficulty={difficulty}
+                  onChangeDifficulty={(level) => {
+                    setDifficulty(level);
+                    if (ai) ai.setDifficulty(level);
+                  }}
+                />
               </Card>
+
+              <MoveHistory moves={engine.getMoveHistory()} />
 
               {gameMode === 'multiplayer' && gameRoom && (
                 <Card
-                  className="p-6"
+                  className="p-4"
                   style={{
                     backgroundColor: THEME.primary,
                     borderColor: THEME.secondary,
                   }}
                 >
                   <h3
-                    className="text-xl font-bold mb-4"
+                    className="text-sm font-bold mb-2"
                     style={{ color: THEME.secondary }}
                   >
                     كود الغرفة
                   </h3>
                   <div
-                    className="p-4 rounded text-center text-2xl font-bold"
+                    className="p-2 rounded text-center text-lg font-bold"
                     style={{
                       backgroundColor: THEME.secondary,
                       color: THEME.primary,
@@ -310,25 +333,8 @@ export default function Home() {
                   >
                     {gameRoom.roomCode}
                   </div>
-                  <p
-                    className="text-sm mt-2"
-                    style={{ color: THEME.textSecondary }}
-                  >
-                    شارك هذا الكود مع صديقك
-                  </p>
                 </Card>
               )}
-
-              <Button
-                onClick={resetGame}
-                className="w-full"
-                style={{
-                  backgroundColor: THEME.secondary,
-                  color: THEME.primary,
-                }}
-              >
-                العودة إلى القائمة الرئيسية
-              </Button>
             </div>
           </div>
         )}
